@@ -35,7 +35,7 @@ EOF
 echo -e $PLANE
 }
 
-InfoMenu() {
+InfoMenu() {    # Show the specific menu about the programm.
     local CREATOR="Organ13at0r"
     local GIT_REPOSITORY="https://github.com/Organ13at0r/ssh-manager.git"
     local VERSION="0.1.0"
@@ -50,7 +50,7 @@ InfoMenu() {
 }
 
 # [Working with hosts]
-HostsMenu() {
+HostsMenu() {   # Print the additional menu.
     local ENTRY_MENU_LINE=("List" "Add" "Delete" "Ping" "Connect" "Copy-File-To" "Copy-File-From" "Set-Secure-SSHD" "Quit")
     local PS3="SSH Manager/Hosts >> "
 
@@ -83,7 +83,7 @@ AddHost() {
         read -rep "Enter a key-file name: " KEYNAME
     done
 
-    KEYNAME="$HOME/.ssh/$KEYNAME"
+    KEYNAME="$HOME/.ssh/$KEYNAME"   # Create the absolute path.
 
     until [[ $BITS =~ ^(1024|2048|3072|4096)$ ]]; do
         read -rep "Enter a key-size in bits [1024,2048,3072,4096]: " BITS
@@ -98,15 +98,7 @@ DeleteHost() {
     :
 }
 
-GetHostAddress() {
-    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
-        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
-
-        [[ $HOST =~ [Ll]ist ]] && GetHosts # See available hosts in user's config
-    done
-}
-
-CopyFile() {
+CopyFile() {    # Copy the file from-to host by a specific location.
     local HOST=:
     local PORT=:
     local USERNAME=:
@@ -135,31 +127,16 @@ CopyFile() {
     fi
 }
 
-GetFileMetadata() {
-    read -rep "Enter a source of file: " FILE_SOURCE
-    read -rep "Enter a destination of file: " FILE_DESTINATION
-}
-
 SetSecureSSHD() {
     :
 }
 
-GetHosts() {
+GetHosts() {    # Get all hosts, which are stored in the "known_host" file.
     CheckKNOWN_HOST
     
     for HOST in $(cat $KNOWN_HOSTS | awk '{print $1}' | uniq); do
         printf "Host: %s\n" $HOST
     done
-}
-
-CheckKNOWN_HOST() {
-    [[ -e $KNOWN_HOSTS ]] || {  # Check if file does exist
-        printf "%bError:%b %s does not exist\n" $RED $PLANE $KNOWN_HOSTS && exit $FILE_NOT_EXISTS
-    }
-
-    [[ -r $KNOWN_HOSTS ]] || {  # Check if file has the read-perm
-        printf "%bError:%b %s does not have the read permission\n" $RED $PLANE $KNOWN_HOSTS && exit $PERMISSION_ERROR
-    }
 }
 
 PingHost() {
@@ -175,7 +152,7 @@ PingHost() {
     fi
 }
 
-ConnectToHost() {
+ConnectToHost() {   # Get the needed info and init a connection to the host.
     local PORT=:
     local HOST=:
     local USERNAME=:
@@ -188,11 +165,16 @@ ConnectToHost() {
 
     GetHostAdditionalInfo
 
-    echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config
+    echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config if it does not exist.
     ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
 }
 
-GetHostAdditionalInfo() {
+GetFileMetadata() {
+    read -rep "Enter a source of file: " FILE_SOURCE
+    read -rep "Enter a destination of file: " FILE_DESTINATION
+}
+
+GetHostAdditionalInfo() {   # Get additional info about the host, such a port and username from user.
     until [[ $PORT =~ ^[0-9]+$ ]] && [[ $PORT -ge 1 ]] && [[ $PORT -le 65535 ]]; do
         read -rep "Type server's port: " PORT
     done
@@ -202,7 +184,25 @@ GetHostAdditionalInfo() {
     done
 }
 
-TryLoadConfig() {
+GetHostAddress() {  # Get the host's address from user.
+    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
+        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
+
+        [[ $HOST =~ [Ll]ist ]] && GetHosts # See available hosts in user's config
+    done
+}
+
+CheckKNOWN_HOST() { # Checking of the "known_host" file.
+    [[ -e $KNOWN_HOSTS ]] || {  # Check if file does exist
+        printf "%bError:%b %s does not exist\n" $RED $PLANE $KNOWN_HOSTS && exit $FILE_NOT_EXISTS
+    }
+
+    [[ -r $KNOWN_HOSTS ]] || {  # Check if file has the read-perm
+        printf "%bError:%b %s does not have the read permission\n" $RED $PLANE $KNOWN_HOSTS && exit $PERMISSION_ERROR
+    }
+}
+
+TryLoadConfig() {   # If config does exist, then loading it.
     HOST="$1"
 
     ls -l $CONFIG_DIR | grep $HOST &> /dev/null && {
@@ -212,7 +212,7 @@ TryLoadConfig() {
 }
 # -----------------------------------------------------------
 
-InitUserSpace() {
+InitUserSpace() {   # Setting the needed parameters.
     local SLEEP_TIME=2
 
     [[ -e $CONFIG_DIR ]] || {

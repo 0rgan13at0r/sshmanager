@@ -64,7 +64,7 @@ HostsMenu() {
             [Pp]ing             | [Pp]   | 4 ) PingHost ;;
             [Cc]onnect          | [Cc]   | 5 ) ConnectToHost ;;
             [Cc]opy-file-to              | 6 ) CopyFileTo ;;
-            [Cc]opy-file-from            | 7 ) CopyFileFrom ;;
+            [Cc]opy-file-from            | 7 ) clear ; CopyFileFrom ;;
             [Ss]et-secure-sshd  | [Ss]   | 8 ) SetSecureSSHD ;;
             [Qq]uit             | [Qq]   | 9 ) clear ; MainMenu ;;
             *                                ) printf "%s\n" "$REPLY: does not exist. Try again." ;;
@@ -103,7 +103,33 @@ CopyFileTo() {
 }
 
 CopyFileFrom() {
-    :
+    local HOST=:
+    local PORT=:
+    local USERNAME=:
+    local FILE_SOURCE=:
+    local FILE_DESTINATION=:
+
+    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
+        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
+
+        [[ $HOST =~ [Ll]ist ]] && GetHosts && CopyFileFrom  # See available hosts in user's config
+    done
+
+    GetFileMetadata
+
+    TryLoadConfig $HOST && {
+        scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu
+    }
+
+    GetHostAdditionalInfo
+
+    echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config
+    scp ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu
+}
+
+GetFileMetadata() {
+    read -rep "Enter a source of file: " FILE_SOURCE
+    read -rep "Enter a destination of file: " FILE_DESTINATION
 }
 
 SetSecureSSHD() {
@@ -156,10 +182,17 @@ ConnectToHost() {
         [[ $HOST =~ [Ll]ist ]] && GetHosts && ConnectToHost  # See available hosts in user's config
     done
 
-    if ls -l $CONFIG_DIR | grep $HOST &> /dev/null; then    # If host config exists then loading it
-        LoadConfig $HOST && ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
-    fi
+    TryLoadConfig $HOST && {
+        ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
+    }
 
+    GetHostAdditionalInfo
+
+    echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config
+    ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
+}
+
+GetHostAdditionalInfo() {
     until [[ $PORT =~ ^[0-9]+$ ]] && [[ $PORT -ge 1 ]] && [[ $PORT -le 65535 ]]; do
         read -rep "Type server's port: " PORT
     done
@@ -167,16 +200,15 @@ ConnectToHost() {
     until [[ $USERNAME =~ ^[a-zA-Z0-9]+$ ]]; do
         read -rp "Type an username: " -e -i $(whoami) USERNAME
     done
-
-    echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config
-
-    ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
 }
 
-LoadConfig() {
+TryLoadConfig() {
     HOST="$1"
-    PORT=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Port | awk '{print $2}')
-    USERNAME=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Username | awk '{print $2}')
+
+    ls -l $CONFIG_DIR | grep $HOST &> /dev/null && {
+        PORT=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Port | awk '{print $2}')
+        USERNAME=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Username | awk '{print $2}')
+    }
 }
 # -----------------------------------------------------------
 

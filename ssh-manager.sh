@@ -63,8 +63,8 @@ HostsMenu() {
             [Dd]elete           | [Dd]   | 3 ) DeleteHost ;;
             [Pp]ing             | [Pp]   | 4 ) PingHost ;;
             [Cc]onnect          | [Cc]   | 5 ) ConnectToHost ;;
-            [Cc]opy-file-to              | 6 ) CopyFileTo ;;
-            [Cc]opy-file-from            | 7 ) clear ; CopyFileFrom ;;
+            [Cc]opy-file-to              | 6 ) clear ; CopyFile --to ;;
+            [Cc]opy-file-from            | 7 ) clear ; CopyFile --from ;;
             [Ss]et-secure-sshd  | [Ss]   | 8 ) SetSecureSSHD ;;
             [Qq]uit             | [Qq]   | 9 ) clear ; MainMenu ;;
             *                                ) printf "%s\n" "$REPLY: does not exist. Try again." ;;
@@ -98,11 +98,7 @@ DeleteHost() {
     :
 }
 
-CopyFileTo() {
-    :
-}
-
-CopyFileFrom() {
+CopyFile() {
     local HOST=:
     local PORT=:
     local USERNAME=:
@@ -112,19 +108,28 @@ CopyFileFrom() {
     until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
         read -rep "Type any host or type [list] to see available hosts in your config: " HOST
 
-        [[ $HOST =~ [Ll]ist ]] && GetHosts && CopyFileFrom  # See available hosts in user's config
+        [[ $HOST =~ [Ll]ist ]] && GetHosts && CopyFile $1 # See available hosts in user's config
     done
 
     GetFileMetadata
 
     TryLoadConfig $HOST && {
-        scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu
+        if [[ "$1" == "--from" ]]; then
+            scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu || echo "File not found" && exit $FILE_NOT_EXISTS
+        else
+            scp -P $PORT $FILE_SOURCE ${USERNAME}@${HOST}:${FILE_DESTINATION} && HostsMenu || echo "File not found" && exit $FILE_NOT_EXISTS
+        fi
     }
 
     GetHostAdditionalInfo
 
     echo -e "Host: $HOST\nPort: $PORT\nUsername: $USERNAME" | base64 > "${CONFIG_DIR}/$HOST.conf" # Create config
-    scp ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu
+    
+    if [[ "$1" == "--from" ]]; then
+            scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu
+    else
+        scp -P $PORT $FILE_SOURCE ${USERNAME}@${HOST}:${FILE_DESTINATION} && HostsMenu
+    fi
 }
 
 GetFileMetadata() {

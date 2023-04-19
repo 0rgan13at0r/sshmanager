@@ -2,7 +2,7 @@
 readonly KNOWN_HOSTS="$HOME/.ssh/known_hosts"
 readonly CONFIG_DIR="$HOME/.sshmanager"
 
-# Exit Code
+# Exit codes
 readonly FILE_NOT_EXISTS=1
 readonly PERMISSION_ERROR=2
 readonly UNKNOWN_ERROR=125
@@ -59,33 +59,73 @@ HostsMenu() {
     select USER_CHOOSE in ${ENTRY_MENU_LINE[@]}; do
         case "$REPLY" in
             [Ll]ist             | [Ll]   | 1 ) GetHosts ;;
-            [Aa]dd              | [Aa]   | 2 ) : ;;
-            [Dd]elete           | [Dd]   | 3 ) : ;;
+            [Aa]dd              | [Aa]   | 2 ) clear ; AddHost ;;
+            [Dd]elete           | [Dd]   | 3 ) DeleteHost ;;
             [Pp]ing             | [Pp]   | 4 ) PingHost ;;
             [Cc]onnect          | [Cc]   | 5 ) ConnectToHost ;;
-            [Cc]opy-file-to              | 6 ) : ;;
-            [Cc]opy-file-from            | 7 ) : ;;
-            [Ss]et-secure-sshd  | [Ss]   | 8 ) : ;;
+            [Cc]opy-file-to              | 6 ) CopyFileTo ;;
+            [Cc]opy-file-from            | 7 ) CopyFileFrom ;;
+            [Ss]et-secure-sshd  | [Ss]   | 8 ) SetSecureSSHD ;;
             [Qq]uit             | [Qq]   | 9 ) clear ; MainMenu ;;
             *                                ) printf "%s\n" "$REPLY: does not exist. Try again." ;;
         esac
     done
 }
 
+AddHost() {
+    local KEYNAME=:
+    local BITS=:
+    local KEYTYPE="rsa"
+
+    PrintBanner
+
+    until [[ $KEYNAME =~ ^[a-zA-Z0-9\-]+$ ]]; do
+        read -rep "Enter a key-file name: " KEYNAME
+    done
+
+    KEYNAME="$HOME/.ssh/$KEYNAME"
+
+    until [[ $BITS =~ ^(1024|2048|3072|4096)$ ]]; do
+        read -rep "Enter a key-size in bits [1024,2048,3072,4096]: " BITS
+    done
+
+    echo -e $GREEN
+        ssh-keygen -t $KEYTYPE -b $BITS -P "" -f $KEYNAME
+    echo -e $PLANE
+}
+
+DeleteHost() {
+    :
+}
+
+CopyFileTo() {
+    :
+}
+
+CopyFileFrom() {
+    :
+}
+
+SetSecureSSHD() {
+    :
+}
+
 GetHosts() {
+    CheckKNOWN_HOST
     
-    if [[ -e $KNOWN_HOSTS ]]; then  # Check if file exists.
-        if [[ -r $KNOWN_HOSTS ]]; then  # Check if file has read permission.
-            for HOST in $(cat $KNOWN_HOSTS | awk '{print $1}' | uniq); do
-                printf "Host: %s\n" $HOST
-            done
-        else
-            printf "%bError:%b PERMISSION_ERROR\n" $RED $PLANE ; exit $PERMISSION_ERROR
-        fi
-    else
-        printf "%bError:%b FILE_NOT_EXISTS\n" $RED $PLANE ; exit $FILE_NOT_EXISTS
-    fi 
-    
+    for HOST in $(cat $KNOWN_HOSTS | awk '{print $1}' | uniq); do
+        printf "Host: %s\n" $HOST
+    done
+}
+
+CheckKNOWN_HOST() {
+    [[ -e $KNOWN_HOSTS ]] || {  # Check if file does exist
+        printf "%bError:%b %s does not exist\n" $RED $PLANE $KNOWN_HOSTS && exit $FILE_NOT_EXISTS
+    }
+
+    [[ -r $KNOWN_HOSTS ]] || {  # Check if file has the read-perm
+        printf "%bError:%b %s does not have the read permission\n" $RED $PLANE $KNOWN_HOSTS && exit $PERMISSION_ERROR
+    }
 }
 
 PingHost() {
@@ -117,7 +157,7 @@ ConnectToHost() {
     done
 
     if ls -l $CONFIG_DIR | grep $HOST &> /dev/null; then    # If host config exists then loading it
-        LoadConfig $HOST
+        LoadConfig $HOST && ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
     fi
 
     until [[ $PORT =~ ^[0-9]+$ ]] && [[ $PORT -ge 1 ]] && [[ $PORT -le 65535 ]]; do
@@ -134,14 +174,9 @@ ConnectToHost() {
 }
 
 LoadConfig() {
-    local HOST="$1"
-    local PORT=:
-    local USERNAME=:
-
+    HOST="$1"
     PORT=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Port | awk '{print $2}')
     USERNAME=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Username | awk '{print $2}')
-
-    ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR
 }
 # -----------------------------------------------------------
 
@@ -174,6 +209,7 @@ MainMenu() {
     done
 }
 
+# --------------------MAIN POINT---------------------
 InitUserSpace
 
 # [BAR]
@@ -184,3 +220,4 @@ done ; printf "]\n" ; sleep 0.5
 #-------------------------------------
 
 MainMenu
+# ---------------------------------------------------

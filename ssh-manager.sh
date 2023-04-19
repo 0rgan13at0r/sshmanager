@@ -98,6 +98,14 @@ DeleteHost() {
     :
 }
 
+GetHostAddress() {
+    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
+        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
+
+        [[ $HOST =~ [Ll]ist ]] && GetHosts # See available hosts in user's config
+    done
+}
+
 CopyFile() {
     local HOST=:
     local PORT=:
@@ -105,12 +113,7 @@ CopyFile() {
     local FILE_SOURCE=:
     local FILE_DESTINATION=:
 
-    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
-        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
-
-        [[ $HOST =~ [Ll]ist ]] && GetHosts && CopyFile $1 # See available hosts in user's config
-    done
-
+    GetHostAddress && CopyFile "$1"
     GetFileMetadata
 
     TryLoadConfig $HOST && {
@@ -163,11 +166,7 @@ PingHost() {
     local HOST=:
     local PACKAGE_COUNT=5
 
-    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
-        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
-    done
-
-    [[ $HOST =~ [Ll]ist ]] && GetHosts && PingHost  # See available hosts in user's config
+    GetHostAddress && PingHost
 
     if ping -c $PACKAGE_COUNT $HOST &> /dev/null; then
         printf "[%s] %b- available%b\n" $HOST $GREEN $PLANE
@@ -181,11 +180,7 @@ ConnectToHost() {
     local HOST=:
     local USERNAME=:
     
-    until [[ $HOST =~ ^([0-9]{1,3}\.){3}|[Ll]ist ]]; do
-        read -rep "Type any host or type [list] to see available hosts in your config: " HOST
-
-        [[ $HOST =~ [Ll]ist ]] && GetHosts && ConnectToHost  # See available hosts in user's config
-    done
+    GetHostAddress && ConnectToHost
 
     TryLoadConfig $HOST && {
         ssh ${USERNAME}@${HOST} -p $PORT && exit $SUCCESS || printf "Something has been wrong" && exit $UNKNOWN_ERROR

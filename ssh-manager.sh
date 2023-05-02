@@ -14,6 +14,7 @@ readonly GREEN="\e[1;32m"
 readonly YELLOW="\e[1;33m"
 readonly PLANE="\e[0m"
 
+trap "ExitProgram" INT
 
 PrintBanner() {
     echo -e $YELLOW
@@ -35,9 +36,16 @@ EOF
 echo -e $PLANE
 }
 
+ShowBar() {
+    printf "\n["
+    for _ in {1..100}; do
+        printf "#" ; sleep 0.001
+    done ; printf "]\n" ; sleep 0.5
+}
+
 InfoMenu() {    # Show the specific menu about the programm.
     local CREATOR="Organ13at0r"
-    local GIT_REPOSITORY="https://github.com/Organ13at0r/ssh-manager.git"
+    local GIT_REPOSITORY="https://github.com/Organ13at0r/sshmanager.git"
     local VERSION="0.1.0"
 
     PrintBanner
@@ -49,7 +57,6 @@ InfoMenu() {    # Show the specific menu about the programm.
     read -n1 -p "Press any key to continue..." && MainMenu
 }
 
-# [Working with hosts]
 HostsMenu() {   # Print the additional menu.
     local ENTRY_MENU_LINE=("List" "Add" "Delete" "Ping" "Connect" "Copy-File-To" "Copy-File-From" "Set-Secure-SSHD" "Quit")
     local PS3="SSH Manager/Hosts >> "
@@ -65,7 +72,7 @@ HostsMenu() {   # Print the additional menu.
             [Cc]onnect          | [Cc]   | 5 ) ConnectToHost ;;
             [Cc]opy-file-to              | 6 ) clear ; CopyFile --to ;;
             [Cc]opy-file-from            | 7 ) clear ; CopyFile --from ;;
-            [Ss]et-secure-sshd  | [Ss]   | 8 ) SetSecureSSHD ;;
+            [Ss]et-secure-sshd  | [Ss]   | 8 ) clear ; SetSecureSSHD ;;
             [Qq]uit             | [Qq]   | 9 ) clear ; MainMenu ;;
             *                                ) printf "%s\n" "$REPLY: does not exist. Try again." ;;
         esac
@@ -94,7 +101,7 @@ AddHost() {
     echo -e $PLANE
 }
 
-DeleteHost() {
+DeleteHost() {  # TODO: Should be done before a release.
     :
 }
 
@@ -110,9 +117,9 @@ CopyFile() {    # Copy the file from-to host by a specific location.
 
     TryLoadConfig $HOST && {
         if [[ "$1" == "--from" ]]; then
-            scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu || echo "File not found" && exit $FILE_NOT_EXISTS
+            scp -P $PORT ${USERNAME}@${HOST}:${FILE_SOURCE} $FILE_DESTINATION && HostsMenu || echo "File not found. Try again." && CopyFile "$1"
         else
-            scp -P $PORT $FILE_SOURCE ${USERNAME}@${HOST}:${FILE_DESTINATION} && HostsMenu || echo "File not found" && exit $FILE_NOT_EXISTS
+            scp -P $PORT $FILE_SOURCE ${USERNAME}@${HOST}:${FILE_DESTINATION} && HostsMenu || echo "File not found. Try again." && CopyFile "$1"
         fi
     }
 
@@ -127,8 +134,38 @@ CopyFile() {    # Copy the file from-to host by a specific location.
     fi
 }
 
-SetSecureSSHD() {
-    :
+SetSecureSSHD() {   # Set secure-sshd config.
+    local SSHD_CONFIG="/etc/ssh/sshd_config"
+    local SLEEP_TIME=1
+    local ALIVE_TIME=600
+    local AUTH_TRIES=3
+    local MAX_SESSIONS=3
+    local RANDOM_PORT="$RANDOM"
+
+    PrintBanner
+
+    [[ -w $SSHD_CONFIG ]] || {
+        echo -e $RED
+            printf "Error: Access Denied!!!\n" 
+        echo -e $PLANE
+
+        read -n1 -p "Press any key to continue..." && HostsMenu
+    }
+
+    echo -e $YELLOW
+        printf "Setting to Protocol 2...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*Protocol\ [^2]/Protocol\ 2/1" $SSHD_CONFIG # Set to Protocol 2.
+        printf "Setting a random port to ${RANDOM_PORT}...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*Port\ 22/Port ${RANDOM_PORT}/1" $SSHD_CONFIG  # Set a random port.
+        printf "Setting [PermitEmptyPassword] to NO...\n" ; sleep $SLEEP_TIME ; sed -i 's/^.*PermitEmptyPasswords.*/PermitEmptyPasswords no/1' $SSHD_CONFIG # Set [PermitEmptyPasswords] to NO.
+        printf "Setting [PasswordAuthentication] to NO...\n" ; sleep $SLEEP_TIME ; sed -i 's/^.*PasswordAuthentication.*/PasswordAuthentication no/1' $SSHD_CONFIG # Set [PasswordAuthentication] to NO.
+        printf "Setting [PublicKeyAuthentication] to YES...\n" ; sleep $SLEEP_TIME ; sed -i 's/^.*PublicKeyAuthentication.*/PublicKeyAuthentication yes/1' $SSHD_CONFIG # Set [PublicKeyAuthentication] to YES.
+        printf "Setting [X11Forwarding] to NO...\n" ; sleep $SLEEP_TIME ; sed -i 's/^.*X11Forwarding.*/X11Forwarding no/1' $SSHD_CONFIG # Set [X11Forwarding] to NO.
+        printf "Setting [ClientAliveInterval] to ${ALIVE_TIME}...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*ClientAliveInterval.*/ClientAliveInterval ${ALIVE_TIME}/1" $SSHD_CONFIG # Set [ClientAliveInterval] to a random time.
+        printf "Setting [MaxAuthTries] to ${AUTH_TRIES}...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*MaxAuthTries.*/MaxAuthTries ${AUTH_TRIES}/1" $SSHD_CONFIG # Set [MaxAuthTries] to a random count.
+        printf "Setting [MaxSessions] to ${MAX_SESSIONS}...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*MaxSessions.*/MaxSessions ${MAX_SESSIONS}/1" $SSHD_CONFIG # Set [MaxSessions] to a random count.
+        printf "Setting [PermitRootLogin] to NO...\n" ; sleep $SLEEP_TIME ; sed -i "s/^.*PermitRootLogin.*/PermitRootLogin no/1" $SSHD_CONFIG # Set [PermitRootLogoin] to NO.
+    echo -e $PLANE
+
+    systemctl restart sshd
 }
 
 GetHosts() {    # Get all hosts, which are stored in the "known_host" file.
@@ -210,15 +247,27 @@ TryLoadConfig() {   # If config does exist, then loading it.
         USERNAME=$(cat "${CONFIG_DIR}/${HOST}.conf" | base64 -d | grep Username | awk '{print $2}')
     }
 }
-# -----------------------------------------------------------
 
-InitUserSpace() {   # Setting the needed parameters.
+ExitProgram() {
+    local USER_CHOISE=:
+
+    until [[ $USER_CHOISE =~ ^([Yy]es|[Nn]o)$ ]]; do
+        read -rep "Are you sure you want to leave? [Yes/No]: " USER_CHOISE
+    done
+
+    [[ $USER_CHOISE =~ [Nn]o ]] && MainMenu # If answer is a NO then to launch the main menu.
+
+    exit $SUCCESS
+}
+
+InitUserSpace() {   # Setting the needed parameters once.
     local SLEEP_TIME=2
 
     [[ -e $CONFIG_DIR ]] || {
         printf "%b[INITIALISATION]%b\n" $YELLOW $PLANE ; sleep $SLEEP_TIME
         printf "%bCreating config directory...%b [%s]\n\n" $YELLOW $PLANE $CONFIG_DIR ; sleep $SLEEP_TIME
-        mkdir $CONFIG_DIR
+
+        mkdir $CONFIG_DIR && chmod 600 $CONFIG_DIR
 
         read -n1 -p "Press any key to continue..."
     }
@@ -242,14 +291,5 @@ MainMenu() {
 }
 
 # --------------------MAIN POINT---------------------
-InitUserSpace
-
-# [BAR]
-printf "\n["
-for _ in {1..100}; do
-    printf "#" ; sleep 0.001
-done ; printf "]\n" ; sleep 0.5
-#-------------------------------------
-
-MainMenu
+InitUserSpace ; ShowBar ; MainMenu
 # ---------------------------------------------------
